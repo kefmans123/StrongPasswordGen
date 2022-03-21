@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/dlclark/regexp2"
 )
 
 var passwdLength int
@@ -15,6 +17,13 @@ var minNumbers int
 var minCharacters int
 var minSpecialChar int
 var help bool
+
+var sC int
+var lC int
+var n int
+var spC int
+
+var checkpass string
 
 var SmollCharacters string = "abcdefghijklmnopqrstuwvxyz"
 var LargeCharacters string = "ABCDEFGHIJKLMNOPQRSTUWVXYZ"
@@ -27,20 +36,43 @@ func init() {
 	flag.IntVar(&minNumbers, "num", 0, "Minimal amount of numbers in your password.")
 	flag.IntVar(&minSpecialChar, "special", 0, "Minimal amount of special characters in your password.")
 	flag.BoolVar(&help, "h", false, "A list of all the flags that can be used.")
+	flag.StringVar(&checkpass, "check", "", "Check your current password if its secure.")
+
 	flag.Parse()
 
 	if help {
 		flag.PrintDefaults()
-		os.Exit(111)
+		os.Exit(0)
 	}
 
-	if passwdLength < 8 {
-		fmt.Println("Please only use a password lenght of 8 or more.")
-		os.Exit(111)
+	if checkpass == "" {
+		if passwdLength < 8 {
+			fmt.Println("Please only use a password lenght of 8 or more.")
+			os.Exit(0)
+		}
+
+		if minCharacters+minNumbers+minSpecialChar > passwdLength {
+			fmt.Println("Your minimum requirements are too high for this current lenght. You are trying to use:", minCharacters+minNumbers+minSpecialChar, "characters.\n But your length is only:", passwdLength, "Please use a higher length or make your requirements smaller.")
+			os.Exit(0)
+		}
 	}
+
 }
 
 func main() {
+	if checkpass != "" {
+		check, _ := CheckPassword(checkpass)
+
+		if check {
+			fmt.Printf("Your password is secure.")
+
+		} else {
+			fmt.Println("Your password is not secure.")
+
+		}
+		os.Exit(0)
+
+	}
 	c, e := createPassword()
 
 	if e != nil {
@@ -52,27 +84,143 @@ func main() {
 
 func createPassword() (string, error) {
 	rand.Seed(time.Now().UnixNano())
-	pwdGenLength := passwdLength - 4
 
-	minCharacters = minCharacters / 2
+	var F_sCharacters string
+	var F_lCharacters string
+	var F_Numbers string
+	var F_spCharacters string
 
-	SC := rand.Intn(pwdGenLength)
-	LC := rand.Intn(pwdGenLength - SC)
-	N := rand.Intn(pwdGenLength - (SC + LC))
-	SPC := pwdGenLength - (SC + LC + N)
+	var e error
 
-	F_SCharacters, e := randomCharacters(0, SC+1)
-	F_LCharacters, e := randomCharacters(1, LC+1)
-	F_Numbers, e := randomCharacters(2, N+1)
-	F_SPCharacters, e := randomCharacters(3, SPC+1)
+	totalMinimal := minCharacters + minNumbers + minSpecialChar
+	pwdGenLength := (passwdLength - 4) - totalMinimal
 
-	password := F_SCharacters + F_LCharacters + F_Numbers + F_SPCharacters
+	if totalMinimal > 0 {
+
+		for i := 0; i < pwdGenLength-4; i++ {
+			x := rand.Intn(4)
+
+			switch x {
+
+			case 0:
+				minCharacters++
+
+			case 1:
+				minCharacters++
+
+			case 2:
+				minNumbers++
+			case 3:
+				minSpecialChar++
+			}
+		}
+
+		if minCharacters > 2 {
+			sC++
+			lC++
+
+			for i := 0; i < minCharacters-2; i++ {
+
+				x := rand.Intn(2)
+
+				switch x {
+
+				case 0:
+					sC++
+				case 1:
+					lC++
+				}
+			}
+		} else {
+			for i := 0; i < minCharacters; i++ {
+
+				x := rand.Intn(2)
+
+				switch x {
+
+				case 0:
+					sC++
+				case 1:
+					lC++
+				}
+			}
+		}
+
+		n = minNumbers
+		spC = minSpecialChar
+
+		sC, e = countInt(sC)
+		if e != nil {
+			return "", fmt.Errorf(e.Error())
+		}
+		lC, e = countInt(lC)
+		if e != nil {
+			return "", fmt.Errorf(e.Error())
+		}
+		n, e = countInt(n)
+		if e != nil {
+			return "", fmt.Errorf(e.Error())
+		}
+		spC, e = countInt(spC)
+		if e != nil {
+			return "", fmt.Errorf(e.Error())
+		}
+
+		for i := sC + lC + n + spC; i < passwdLength; i++ {
+			x := rand.Intn(4)
+
+			switch x {
+
+			case 0:
+				sC++
+
+			case 1:
+				lC++
+
+			case 2:
+				n++
+			case 3:
+				spC++
+			}
+		}
+
+		F_sCharacters, e = randomCharacters(0, sC)
+		F_lCharacters, e = randomCharacters(1, lC)
+		F_Numbers, e = randomCharacters(2, n)
+		F_spCharacters, e = randomCharacters(3, spC)
+
+	} else {
+		for i := 0; i < pwdGenLength; i++ {
+			x := rand.Intn(4)
+
+			switch x {
+
+			case 0:
+				sC++
+
+			case 1:
+				lC++
+
+			case 2:
+				n++
+			case 3:
+				spC++
+			}
+		}
+
+		F_sCharacters, e = randomCharacters(0, sC+1)
+		F_lCharacters, e = randomCharacters(1, lC+1)
+		F_Numbers, e = randomCharacters(2, n+1)
+		F_spCharacters, e = randomCharacters(3, spC+1)
+
+	}
+
+	password := F_sCharacters + F_lCharacters + F_Numbers + F_spCharacters
 	var passwordCharacters []string
 
 	for _, c := range strings.Split(password, "") {
 		passwordCharacters = append(passwordCharacters, c)
 	}
-
 	rand.Shuffle(len(passwordCharacters), func(i, j int) {
 		passwordCharacters[i], passwordCharacters[j] = passwordCharacters[j], passwordCharacters[i]
 	})
@@ -88,7 +236,9 @@ func createPassword() (string, error) {
 	} else {
 		return password, nil
 	}
+
 }
+
 func randomCharacters(chartype int, amount int) (string, error) {
 	var characters string
 
@@ -135,6 +285,19 @@ func randomCharacters(chartype int, amount int) (string, error) {
 	return characters, nil
 }
 
+func countInt(interger int) (int, error) {
+	if interger == 0 {
+		if sC+lC+n+spC >= passwdLength {
+			return interger, fmt.Errorf("Your password does not meet the required security standard. Please include atleast 1 small character, 1 capital character, 1 number and 1 special character.")
+		} else {
+			interger++
+			return interger, nil
+		}
+	} else {
+		return interger, nil
+	}
+}
+
 func getCharacters(chartype string) (string, error) {
 	nChartype := rand.Intn(len(chartype))
 	var tChartype []string
@@ -148,4 +311,12 @@ func getCharacters(chartype string) (string, error) {
 	} else {
 		return tChartype[nChartype], nil
 	}
+}
+
+func CheckPassword(password string) (bool, error) {
+	regex, _ := regexp2.Compile("(?=.*[0-9])(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*?\\]|]).{8,}$", 0)
+
+	match, _ := regex.MatchString(password)
+
+	return match, nil
 }
